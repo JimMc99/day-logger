@@ -1,12 +1,12 @@
 services:
   db:
-    image: postgres:18
+    image: postgres:16
     environment:
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_DB: ${POSTGRES_DB}
     volumes:
-      - postgres_data:/var/lib/postgresql
+      - postgres_data:/var/lib/postgresql/data
     networks:
       - web
     healthcheck:
@@ -17,7 +17,7 @@ services:
       start_period: 2s
 
   db-migrate:
-    image: postgres:18
+    image: postgres:16
     environment:
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
@@ -29,7 +29,7 @@ services:
       - ./migrate.sh:/migrate.sh
     networks:
       - web
-    entrypoint: /migrate.sh
+    entrypoint: ["sh", "/migrate.sh"]
     depends_on:
       db:
         condition: service_healthy
@@ -59,6 +59,9 @@ services:
       - caddy_config:/config
     networks:
       - web
+    depends_on:
+      - api
+      - frontend
 
 volumes:
   caddy_data:
@@ -69,3 +72,4 @@ volumes:
 
 networks:
   web:
+  

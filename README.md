@@ -11,6 +11,7 @@ POSTGRES_DB=somedb
 Of course, change the user, password and db to whatever you want.
 
 First time to generate the initial (empty) volume:
+docker volume rm day_logger_postgres_data
 docker volume create day_logger_postgres_data
 
 To run:

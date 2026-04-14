@@ -1,33 +1,35 @@
 CREATE TABLE factor_category (
-    id SERIAL PRIMARY KEY,
+    id   SERIAL PRIMARY KEY,
     name VARCHAR(50) NOT NULL UNIQUE
 );
 
 CREATE TABLE factor (
-    id SERIAL PRIMARY KEY,
-    name VARCHAR(100) NOT NULL,
+    id          SERIAL PRIMARY KEY,
+    name        VARCHAR(100) NOT NULL,
     category_id INTEGER NOT NULL,
     CONSTRAINT fk_factor_category
         FOREIGN KEY (category_id)
         REFERENCES factor_category (id)
-        ON DELETE CASCADE
+        ON DELETE CASCADE,
+    -- Prevent duplicate factor names within the same category
+    CONSTRAINT uq_factor_name_category UNIQUE (name, category_id)
 );
 
 CREATE INDEX ix_factor_name ON factor (name);
 
 CREATE TABLE entry (
-    id SERIAL PRIMARY KEY,
+    id        SERIAL PRIMARY KEY,
     timestamp TIMESTAMP WITHOUT TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    note TEXT
+    note      TEXT
 );
 
 CREATE INDEX ix_entry_timestamp ON entry (timestamp);
 
 CREATE TABLE entry_and_factor (
-    id SERIAL PRIMARY KEY,
-    entry_id INTEGER NOT NULL,
+    id        SERIAL PRIMARY KEY,
+    entry_id  INTEGER NOT NULL,
     factor_id INTEGER NOT NULL,
-    note TEXT,
+    note      TEXT,
     CONSTRAINT fk_entry
         FOREIGN KEY (entry_id)
         REFERENCES entry (id)
@@ -38,3 +40,5 @@ CREATE TABLE entry_and_factor (
         ON DELETE CASCADE,
     CONSTRAINT uc_entry_factor UNIQUE (entry_id, factor_id)
 );
+
+INSERT INTO factor_category (name) VALUES ('Food'), ('Feeling'), ('Activity');
