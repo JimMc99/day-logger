@@ -4,12 +4,12 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import func
 from .db import get_db
-from .models import Entry, Factor, FactorCategory, EntryAndFactor
+from .models import Entry, Tag, TagCategory, EntryTag
 from .schema import (
     EntryCreate, EntryUpdate, EntryOut,
-    FactorCreate, FactorOut,
-    FactorCategoryOut,
-    EntryFactorCreate, EntryFactorOut,
+    TagCreate, TagOut,
+    TagCategoryOut,
+    EntryTagCreate, EntryTagOut,
 )
 
 app = FastAPI(docs_url="/docs", redoc_url=None)
@@ -26,9 +26,9 @@ def load_entry(entry_id: int, db: Session) -> Entry:
     entry = (
         db.query(Entry)
         .options(
-            joinedload(Entry.factors)
-            .joinedload(EntryAndFactor.factor)
-            .joinedload(Factor.category)
+            joinedload(Entry.tags)
+            .joinedload(EntryTag.tag)
+            .joinedload(Tag.category)
         )
         .filter(Entry.id == entry_id)
         .first()
@@ -40,64 +40,83 @@ def load_entry(entry_id: int, db: Session) -> Entry:
 
 # ── Categories ─────────────────────────────────────────────────────────────────
 
-@app.get("/categories", response_model=List[FactorCategoryOut])
+@app.get("/categories", response_model=List[TagCategoryOut])
 def get_categories(db: Session = Depends(get_db)):
-    return db.query(FactorCategory).order_by(FactorCategory.name).all()
+    return db.query(TagCategory).order_by(TagCategory.name).all()
 
 
-# ── Factors ────────────────────────────────────────────────────────────────────
+# ── Tags ───────────────────────────────────────────────────────────────────────
 
-@app.get("/factors", response_model=List[FactorOut])
-def get_factors(db: Session = Depends(get_db)):
+@app.get("/tags", response_model=List[TagOut])
+def get_tags(db: Session = Depends(get_db)):
     return (
-        db.query(Factor)
-        .options(joinedload(Factor.category))
-        .order_by(Factor.name)
+        db.query(Tag)
+        .options(joinedload(Tag.category))
+        .order_by(Tag.name)
         .all()
     )
 
 
-@app.post("/factors", response_model=FactorOut, status_code=201)
-def create_factor(factor: FactorCreate, db: Session = Depends(get_db)):
-    if not db.query(FactorCategory).filter(FactorCategory.id == factor.category_id).first():
+@app.post("/tags", response_model=TagOut, status_code=201)
+def create_tag(tag: TagCreate, db: Session = Depends(get_db)):
+    if not db.query(TagCategory).filter(TagCategory.id == tag.category_id).first():
         raise HTTPException(status_code=404, detail="Category not found")
-
-    # Return existing factor if name+category already exists (case-insensitive)
     existing = (
-        db.query(Factor)
+        db.query(Tag)
         .filter(
-            func.lower(Factor.name) == factor.name.lower(),
-            Factor.category_id == factor.category_id,
+            func.lower(Tag.name) == tag.name.lower(),
+            Tag.category_id == tag.category_id,
         )
         .first()
     )
     if existing:
         return (
-            db.query(Factor)
-            .options(joinedload(Factor.category))
-            .filter(Factor.id == existing.id)
+            db.query(Tag)
+            .options(joinedload(Tag.category))
+            .filter(Tag.id == existing.id)
             .first()
         )
-
-    db_factor = Factor(name=factor.name, category_id=factor.category_id)
-    db.add(db_factor)
+    db_tag = Tag(name=tag.name, category_id=tag.category_id)
+    db.add(db_tag)
     db.commit()
-    db.refresh(db_factor)
+    db.refresh(db_tag)
     return (
-        db.query(Factor)
-        .options(joinedload(Factor.category))
-        .filter(Factor.id == db_factor.id)
+        db.query(Tag)
+        .options(joinedload(Tag.category))
+        .filter(Tag.id == db_tag.id)
         .first()
     )
 
 
-@app.delete("/factors/{factor_id}", status_code=204)
-def delete_factor(factor_id: int, db: Session = Depends(get_db)):
-    factor = db.query(Factor).filter(Factor.id == factor_id).first()
-    if not factor:
-        raise HTTPException(status_code=404, detail="Factor not found")
-    db.delete(factor)
+@app.delete("/tags/{tag_id}", status_code=204)
+def delete_tag(tag_id: int, db: Session = Depends(get_db)):
+    tag = db.query(Tag).filter(Tag.id == tag_id).first()
+    if not tag:
+        raise HTTPException(status_code=404, detail="Tag not found")
+    db.delete(tag)
     db.commit()
+
+
+@app.get("/tags/popular", response_model=List[TagOut])
+def get_popular_tags(limit: int = 8, db: Session = Depends(get_db)):
+    top_ids = (
+        db.query(EntryTag.tag_id)
+        .group_by(EntryTag.tag_id)
+        .order_by(func.count(EntryTag.id).desc())
+        .limit(limit)
+        .all()
+    )
+    id_list = [row[0] for row in top_ids]
+    if not id_list:
+        return []
+    tags = (
+        db.query(Tag)
+        .options(joinedload(Tag.category))
+        .filter(Tag.id.in_(id_list))
+        .all()
+    )
+    order = {tid: i for i, tid in enumerate(id_list)}
+    return sorted(tags, key=lambda t: order[t.id])
 
 
 # ── Entries ────────────────────────────────────────────────────────────────────
@@ -107,9 +126,9 @@ def get_entries(db: Session = Depends(get_db)):
     return (
         db.query(Entry)
         .options(
-            joinedload(Entry.factors)
-            .joinedload(EntryAndFactor.factor)
-            .joinedload(Factor.category)
+            joinedload(Entry.tags)
+            .joinedload(EntryTag.tag)
+            .joinedload(Tag.category)
         )
         .order_by(Entry.timestamp.desc())
         .all()
@@ -123,19 +142,19 @@ def get_entry(entry_id: int, db: Session = Depends(get_db)):
 
 @app.post("/entries", response_model=EntryOut, status_code=201)
 def create_entry(entry: EntryCreate, db: Session = Depends(get_db)):
-    db_entry = Entry(note=entry.note, timestamp=entry.timestamp)
+    db_entry = Entry(title=entry.title, timestamp=entry.timestamp)
     db.add(db_entry)
     db.flush()
 
-    for ef in (entry.factors or []):
-        factor = db.query(Factor).filter(Factor.id == ef.factor_id).first()
-        if not factor:
+    for et in (entry.tags or []):
+        tag = db.query(Tag).filter(Tag.id == et.tag_id).first()
+        if not tag:
             db.rollback()
-            raise HTTPException(status_code=404, detail=f"Factor {ef.factor_id} not found")
-        link = EntryAndFactor(
+            raise HTTPException(status_code=404, detail=f"Tag {et.tag_id} not found")
+        link = EntryTag(
             entry_id=db_entry.id,
-            factor_id=ef.factor_id,
-            note=ef.note,
+            tag_id=et.tag_id,
+            detail=et.detail,
         )
         db.add(link)
 
@@ -148,8 +167,8 @@ def update_entry(entry_id: int, data: EntryUpdate, db: Session = Depends(get_db)
     entry = db.query(Entry).filter(Entry.id == entry_id).first()
     if not entry:
         raise HTTPException(status_code=404, detail="Entry not found")
-    if data.note is not None:
-        entry.note = data.note
+    if data.title is not None:
+        entry.title = data.title
     if data.timestamp is not None:
         entry.timestamp = data.timestamp
     db.commit()
@@ -165,62 +184,33 @@ def delete_entry(entry_id: int, db: Session = Depends(get_db)):
     db.commit()
 
 
-# ── Entry factors ──────────────────────────────────────────────────────────────
+# ── Entry tags ─────────────────────────────────────────────────────────────────
 
-@app.post("/entries/{entry_id}/factors", response_model=EntryFactorOut, status_code=201)
-def add_factor_to_entry(entry_id: int, data: EntryFactorCreate, db: Session = Depends(get_db)):
+@app.post("/entries/{entry_id}/tags", response_model=EntryTagOut, status_code=201)
+def add_tag_to_entry(entry_id: int, data: EntryTagCreate, db: Session = Depends(get_db)):
     if not db.query(Entry).filter(Entry.id == entry_id).first():
         raise HTTPException(status_code=404, detail="Entry not found")
-    if not db.query(Factor).filter(Factor.id == data.factor_id).first():
-        raise HTTPException(status_code=404, detail="Factor not found")
-    link = EntryAndFactor(
-        entry_id=entry_id,
-        factor_id=data.factor_id,
-        note=data.note,
-    )
+    if not db.query(Tag).filter(Tag.id == data.tag_id).first():
+        raise HTTPException(status_code=404, detail="Tag not found")
+    link = EntryTag(entry_id=entry_id, tag_id=data.tag_id, detail=data.detail)
     db.add(link)
     db.commit()
     db.refresh(link)
     return (
-        db.query(EntryAndFactor)
-        .options(joinedload(EntryAndFactor.factor).joinedload(Factor.category))
-        .filter(EntryAndFactor.id == link.id)
+        db.query(EntryTag)
+        .options(joinedload(EntryTag.tag).joinedload(Tag.category))
+        .filter(EntryTag.id == link.id)
         .first()
     )
 
 
-@app.delete("/entries/{entry_id}/factors/{link_id}", status_code=204)
-def remove_factor_from_entry(entry_id: int, link_id: int, db: Session = Depends(get_db)):
-    link = db.query(EntryAndFactor).filter(
-        EntryAndFactor.id == link_id,
-        EntryAndFactor.entry_id == entry_id,
+@app.delete("/entries/{entry_id}/tags/{entry_tag_id}", status_code=204)
+def remove_tag_from_entry(entry_id: int, entry_tag_id: int, db: Session = Depends(get_db)):
+    link = db.query(EntryTag).filter(
+        EntryTag.id == entry_tag_id,
+        EntryTag.entry_id == entry_id,
     ).first()
     if not link:
-        raise HTTPException(status_code=404, detail="Link not found")
+        raise HTTPException(status_code=404, detail="Entry tag not found")
     db.delete(link)
     db.commit()
-
-
-# ── Popular factors ────────────────────────────────────────────────────────────
-
-@app.get("/factors/popular", response_model=List[FactorOut])
-def get_popular_factors(limit: int = 8, db: Session = Depends(get_db)):
-    from sqlalchemy import func
-    top_ids = (
-        db.query(EntryAndFactor.factor_id)
-        .group_by(EntryAndFactor.factor_id)
-        .order_by(func.count(EntryAndFactor.id).desc())
-        .limit(limit)
-        .all()
-    )
-    id_list = [row[0] for row in top_ids]
-    if not id_list:
-        return []
-    factors = (
-        db.query(Factor)
-        .options(joinedload(Factor.category))
-        .filter(Factor.id.in_(id_list))
-        .all()
-    )
-    order = {fid: i for i, fid in enumerate(id_list)}
-    return sorted(factors, key=lambda f: order[f.id])

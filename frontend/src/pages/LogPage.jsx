@@ -23,27 +23,26 @@ function formatTime(ts) {
 
 // ── Tag input ─────────────────────────────────────────────────────────────────
 
-function TagInput({ factors, popular, categories, tags, onChange, onNewFactor }) {
+function TagInput({ tags: allTags, popular, categories, selected, onChange, onNewTag }) {
   const [query, setQuery] = useState('')
   const [open, setOpen] = useState(false)
-  const [noteFor, setNoteFor] = useState(null)
-  const [noteVal, setNoteVal] = useState('')
+  const [detailFor, setDetailFor] = useState(null)
+  const [detailVal, setDetailVal] = useState('')
   const inputRef = useRef(null)
   const dropRef = useRef(null)
 
   const q = query.trim().toLowerCase()
 
-  // When query is empty show popular (excluding already-picked), else filter all factors
   const suggestions = q.length === 0
-    ? popular.filter(f => !tags.some(t => t.factor_id === f.id))
-    : factors.filter(f =>
-        f.name.toLowerCase().includes(q) && !tags.some(t => t.factor_id === f.id)
+    ? popular.filter(t => !selected.some(s => s.tag_id === t.id))
+    : allTags.filter(t =>
+        t.name.toLowerCase().includes(q) && !selected.some(s => s.tag_id === t.id)
       )
 
-  const isNew = q.length > 0 && !factors.some(f => f.name.toLowerCase() === q)
+  const isNew = q.length > 0 && !allTags.some(t => t.name.toLowerCase() === q)
 
-  function addExisting(factor) {
-    onChange([...tags, { factor_id: factor.id, name: factor.name, category: factor.category.name, note: '' }])
+  function addExisting(tag) {
+    onChange([...selected, { tag_id: tag.id, name: tag.name, category: tag.category.name, detail: '' }])
     setQuery('')
     setOpen(false)
     inputRef.current?.focus()
@@ -51,28 +50,28 @@ function TagInput({ factors, popular, categories, tags, onChange, onNewFactor })
 
   async function addNew(category) {
     const name = capitaliseFirst(query)
-    const factor = await onNewFactor(name, category.id)
-    if (factor) {
-      onChange([...tags, { factor_id: factor.id, name: factor.name, category: category.name, note: '' }])
+    const tag = await onNewTag(name, category.id)
+    if (tag) {
+      onChange([...selected, { tag_id: tag.id, name: tag.name, category: tag.category.name, detail: '' }])
     }
     setQuery('')
     setOpen(false)
     inputRef.current?.focus()
   }
 
-  function removeTag(idx) {
-    onChange(tags.filter((_, i) => i !== idx))
-    if (noteFor === idx) setNoteFor(null)
+  function removeSelected(idx) {
+    onChange(selected.filter((_, i) => i !== idx))
+    if (detailFor === idx) setDetailFor(null)
   }
 
-  function openNote(idx) {
-    setNoteFor(idx)
-    setNoteVal(tags[idx].note || '')
+  function openDetail(idx) {
+    setDetailFor(idx)
+    setDetailVal(selected[idx].detail || '')
   }
 
-  function saveNote(idx) {
-    onChange(tags.map((t, i) => i === idx ? { ...t, note: noteVal.trim() } : t))
-    setNoteFor(null)
+  function saveDetail(idx) {
+    onChange(selected.map((s, i) => i === idx ? { ...s, detail: detailVal.trim() } : s))
+    setDetailFor(null)
   }
 
   useEffect(() => {
@@ -87,35 +86,35 @@ function TagInput({ factors, popular, categories, tags, onChange, onNewFactor })
 
   return (
     <div className="tag-input-wrap">
-      {tags.length > 0 && (
+      {selected.length > 0 && (
         <div className="tags">
-          {tags.map((tag, idx) => (
+          {selected.map((s, idx) => (
             <div key={idx} className="tag-wrap">
-              <div className={`tag tag--${tag.category.toLowerCase()}`}>
-                <span className="tag__name" onClick={() => noteFor === idx ? setNoteFor(null) : openNote(idx)}>
-                  {tag.name}
-                  {tag.note
-                    ? <em className="tag__note-preview"> · {tag.note}</em>
-                    : <span className="tag__add-note"> +note</span>
+              <div className={`tag tag--${s.category.toLowerCase()}`}>
+                <span className="tag__name" onClick={() => detailFor === idx ? setDetailFor(null) : openDetail(idx)}>
+                  {s.name}
+                  {s.detail
+                    ? <em className="tag__detail-preview"> · {s.detail}</em>
+                    : <span className="tag__add-detail"> +detail</span>
                   }
                 </span>
-                <button type="button" className="tag__remove" onClick={() => removeTag(idx)}>×</button>
+                <button type="button" className="tag__remove" onClick={() => removeSelected(idx)}>×</button>
               </div>
-              {noteFor === idx && (
-                <div className="tag-note-input">
+              {detailFor === idx && (
+                <div className="tag-detail-input">
                   <input
                     autoFocus
                     className="input input--sm"
                     type="text"
-                    placeholder={`Note for ${tag.name}… (e.g. 45 mins, with milk)`}
-                    value={noteVal}
-                    onChange={e => setNoteVal(e.target.value)}
+                    placeholder={`Detail for ${s.name}… (e.g. 45 mins, with milk)`}
+                    value={detailVal}
+                    onChange={e => setDetailVal(e.target.value)}
                     onKeyDown={e => {
-                      if (e.key === 'Enter') saveNote(idx)
-                      if (e.key === 'Escape') setNoteFor(null)
+                      if (e.key === 'Enter') saveDetail(idx)
+                      if (e.key === 'Escape') setDetailFor(null)
                     }}
                   />
-                  <button type="button" className="btn-inline" onClick={() => saveNote(idx)}>Save</button>
+                  <button type="button" className="btn-inline" onClick={() => saveDetail(idx)}>Save</button>
                 </div>
               )}
             </div>
@@ -127,7 +126,7 @@ function TagInput({ factors, popular, categories, tags, onChange, onNewFactor })
         ref={inputRef}
         className="input"
         type="text"
-        placeholder="Add a factor… (e.g. Coffee, Tired, Run)"
+        placeholder="Add a tag… (e.g. Coffee, Tired, Run)"
         value={query}
         onChange={e => { setQuery(e.target.value); setOpen(true) }}
         onFocus={() => setOpen(true)}
@@ -136,14 +135,12 @@ function TagInput({ factors, popular, categories, tags, onChange, onNewFactor })
 
       {open && suggestions.length > 0 && (
         <div className="dropdown" ref={dropRef}>
-          {q.length === 0 && (
-            <div className="dropdown__heading">Recently used</div>
-          )}
-          {suggestions.map(f => (
-            <button key={f.id} type="button" className="dropdown__item" onClick={() => addExisting(f)}>
-              <span>{f.name}</span>
-              <span className={`dropdown__cat dropdown__cat--${f.category.name.toLowerCase()}`}>
-                {f.category.name}
+          {q.length === 0 && <div className="dropdown__heading">Recently used</div>}
+          {suggestions.map(t => (
+            <button key={t.id} type="button" className="dropdown__item" onClick={() => addExisting(t)}>
+              <span>{t.name}</span>
+              <span className={`dropdown__cat dropdown__cat--${t.category.name.toLowerCase()}`}>
+                {t.category.name}
               </span>
             </button>
           ))}
@@ -178,57 +175,56 @@ function TagInput({ factors, popular, categories, tags, onChange, onNewFactor })
 
 export default function LogPage() {
   const [categories, setCategories] = useState([])
-  const [factors, setFactors] = useState([])
+  const [allTags, setAllTags] = useState([])
   const [popular, setPopular] = useState([])
   const [entries, setEntries] = useState([])
-  const [label, setLabel] = useState('')
+  const [title, setTitle] = useState('')
   const [time, setTime] = useState(nowLocalInput())
-  const [tags, setTags] = useState([])
+  const [selected, setSelected] = useState([])
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState(null)
 
   useEffect(() => {
     api.getCategories().then(setCategories).catch(() => {})
-    api.getFactors().then(setFactors).catch(() => {})
+    api.getTags().then(setAllTags).catch(() => {})
     api.getPopular().then(setPopular).catch(() => {})
     api.getEntries().then(setEntries).catch(() => {})
   }, [])
 
-  // Refresh popular after each new entry is saved
   function refreshPopular() {
     api.getPopular().then(setPopular).catch(() => {})
   }
 
-  async function handleNewFactor(name, categoryId) {
-    const factor = await api.createFactor({ name, category_id: categoryId })
-    if (factor) setFactors(prev => [...prev, factor])
-    return factor
+  async function handleNewTag(name, categoryId) {
+    const tag = await api.createTag({ name, category_id: categoryId })
+    if (tag) setAllTags(prev => [...prev, tag])
+    return tag
   }
 
   async function handleSubmit(e) {
     e.preventDefault()
-    if (!label.trim() && tags.length === 0) {
-      setError('Add a label or at least one factor')
+    if (!title.trim() && selected.length === 0) {
+      setError('Add a title or at least one tag')
       return
     }
     setSaving(true)
     setError(null)
     try {
       const entry = await api.createEntry({
-        note: label.trim() || null,
+        title: title.trim() || null,
         timestamp: new Date(time).toISOString(),
-        factors: tags.map(t => ({
-          factor_id: t.factor_id,
-          note: t.note || null,
+        tags: selected.map(s => ({
+          tag_id: s.tag_id,
+          detail: s.detail || null,
         })),
       })
       if (entry) {
         setEntries(prev => [entry, ...prev])
         refreshPopular()
       }
-      setLabel('')
+      setTitle('')
       setTime(nowLocalInput())
-      setTags([])
+      setSelected([])
     } catch (err) {
       setError(err.message)
     } finally {
@@ -248,9 +244,9 @@ export default function LogPage() {
         <input
           className="input"
           type="text"
-          placeholder="Label (e.g. Dinner, Morning run, Woke up…)"
-          value={label}
-          onChange={e => setLabel(e.target.value)}
+          placeholder="What's happening? (e.g. Dinner, Woke up, Morning run…)"
+          value={title}
+          onChange={e => setTitle(e.target.value)}
         />
 
         <input
@@ -261,12 +257,12 @@ export default function LogPage() {
         />
 
         <TagInput
-          factors={factors}
+          tags={allTags}
           popular={popular}
           categories={categories}
-          tags={tags}
-          onChange={setTags}
-          onNewFactor={handleNewFactor}
+          selected={selected}
+          onChange={setSelected}
+          onNewTag={handleNewTag}
         />
 
         {error && <p className="error">{error}</p>}
@@ -284,14 +280,14 @@ export default function LogPage() {
               <span className="entry__time">{formatTime(entry.timestamp)}</span>
               <button className="entry__delete" onClick={() => handleDelete(entry.id)}>✕</button>
             </div>
-            {entry.note && <p className="entry__note">{entry.note}</p>}
-            {entry.factors.length > 0 && (
+            {entry.title && <p className="entry__title">{entry.title}</p>}
+            {entry.tags.length > 0 && (
               <div className="entry__tags">
-                {entry.factors.map(ef => (
-                  <span key={ef.id} className={`tag tag--static tag--${ef.factor.category.name.toLowerCase()}`}>
+                {entry.tags.map(et => (
+                  <span key={et.id} className={`tag tag--static tag--${et.tag.category.name.toLowerCase()}`}>
                     <span className="tag__name">
-                      {ef.factor.name}
-                      {ef.note && <em className="tag__note-preview"> · {ef.note}</em>}
+                      {et.tag.name}
+                      {et.detail && <em className="tag__detail-preview"> · {et.detail}</em>}
                     </span>
                   </span>
                 ))}

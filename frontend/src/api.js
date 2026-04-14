@@ -16,10 +16,10 @@ async function request(method, path, body) {
 
 export const api = {
   getCategories: () => request('GET', '/categories'),
-  getFactors:    () => request('GET', '/factors'),
-  getPopular:    () => request('GET', '/factors/popular'),
-  createFactor:  (data) => request('POST', '/factors', data),
-  deleteFactor:  (id) => request('DELETE', `/factors/${id}`),
+  getTags:       () => request('GET', '/tags'),
+  getPopular:    () => request('GET', '/tags/popular'),
+  createTag:     (data) => request('POST', '/tags', data),
+  deleteTag:     (id) => request('DELETE', `/tags/${id}`),
   getEntries:    () => request('GET', '/entries'),
   createEntry:   (data) => request('POST', '/entries', data),
   deleteEntry:   (id) => request('DELETE', `/entries/${id}`),

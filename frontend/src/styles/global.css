@@ -183,7 +183,7 @@ body {
 }
 .entry__delete:hover { color: var(--danger); }
 
-.entry__note {
+.entry__title {
   font-size: 0.9rem;
   margin-bottom: 0.5rem;
 }
@@ -362,11 +362,11 @@ body {
 }
 
 /* ── Factor note input ── */
-.tag__note-preview { font-style: italic; opacity: 0.75; }
-.tag__add-note { opacity: 0.4; font-size: 0.72rem; }
+.tag__detail-preview { font-style: italic; opacity: 0.75; }
+.tag__add-detail { opacity: 0.4; font-size: 0.72rem; }
 .tag__name { cursor: pointer; }
 
-.tag-note-input {
+.tag-detail-input {
   display: flex;
   gap: 0.4rem;
   align-items: center;

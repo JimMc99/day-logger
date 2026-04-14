@@ -3,7 +3,7 @@ from typing import List, Optional
 from pydantic import BaseModel
 
 
-class FactorCategoryOut(BaseModel):
+class TagCategoryOut(BaseModel):
     id: int
     name: str
 
@@ -11,50 +11,50 @@ class FactorCategoryOut(BaseModel):
         from_attributes = True
 
 
-class FactorCreate(BaseModel):
+class TagCreate(BaseModel):
     name: str
     category_id: int
 
 
-class FactorOut(BaseModel):
+class TagOut(BaseModel):
     id: int
     name: str
-    category: FactorCategoryOut
+    category: TagCategoryOut
 
     class Config:
         from_attributes = True
 
 
-class EntryFactorCreate(BaseModel):
-    factor_id: int
-    note: Optional[str] = None
+class EntryTagCreate(BaseModel):
+    tag_id: int
+    detail: Optional[str] = None
 
 
-class EntryFactorOut(BaseModel):
+class EntryTagOut(BaseModel):
     id: int
-    factor: FactorOut
-    note: Optional[str]
+    tag: TagOut
+    detail: Optional[str]
 
     class Config:
         from_attributes = True
 
 
 class EntryCreate(BaseModel):
-    note: Optional[str] = None
+    title: Optional[str] = None
     timestamp: Optional[datetime] = None
-    factors: Optional[List[EntryFactorCreate]] = []
+    tags: Optional[List[EntryTagCreate]] = []
 
 
 class EntryUpdate(BaseModel):
-    note: Optional[str] = None
+    title: Optional[str] = None
     timestamp: Optional[datetime] = None
 
 
 class EntryOut(BaseModel):
     id: int
-    note: Optional[str]
+    title: Optional[str]
     timestamp: datetime
-    factors: List[EntryFactorOut] = []
+    tags: List[EntryTagOut] = []
 
     class Config:
         from_attributes = True
