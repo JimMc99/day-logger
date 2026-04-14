@@ -199,3 +199,28 @@ def remove_factor_from_entry(entry_id: int, link_id: int, db: Session = Depends(
         raise HTTPException(status_code=404, detail="Link not found")
     db.delete(link)
     db.commit()
+
+
+# ── Popular factors ────────────────────────────────────────────────────────────
+
+@app.get("/factors/popular", response_model=List[FactorOut])
+def get_popular_factors(limit: int = 8, db: Session = Depends(get_db)):
+    from sqlalchemy import func
+    top_ids = (
+        db.query(EntryAndFactor.factor_id)
+        .group_by(EntryAndFactor.factor_id)
+        .order_by(func.count(EntryAndFactor.id).desc())
+        .limit(limit)
+        .all()
+    )
+    id_list = [row[0] for row in top_ids]
+    if not id_list:
+        return []
+    factors = (
+        db.query(Factor)
+        .options(joinedload(Factor.category))
+        .filter(Factor.id.in_(id_list))
+        .all()
+    )
+    order = {fid: i for i, fid in enumerate(id_list)}
+    return sorted(factors, key=lambda f: order[f.id])

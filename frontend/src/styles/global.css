@@ -391,3 +391,12 @@ body {
   flex-shrink: 0;
 }
 .btn-inline:hover { opacity: 0.85; }
+
+.dropdown__heading {
+  padding: 0.4rem 0.85rem;
+  font-size: 0.68rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--muted);
+  border-bottom: 1px solid var(--border);
+}

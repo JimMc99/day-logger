@@ -2,7 +2,8 @@ import { useState, useEffect, useRef } from 'react'
 import { api } from '../api'
 
 function capitaliseFirst(str) {
-    const s = str.trim(); return s.charAt(0).toUpperCase() + s.slice(1)
+  const s = str.trim()
+  return s.charAt(0).toUpperCase() + s.slice(1)
 }
 
 function nowLocalInput() {
@@ -12,7 +13,6 @@ function nowLocalInput() {
 }
 
 function formatTime(ts) {
-  // Parse as UTC and display in the user's local timezone
   const d = new Date(ts.endsWith('Z') ? ts : ts + 'Z')
   const today = new Date()
   const time = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
@@ -23,18 +23,23 @@ function formatTime(ts) {
 
 // ── Tag input ─────────────────────────────────────────────────────────────────
 
-function TagInput({ factors, categories, tags, onChange, onNewFactor }) {
+function TagInput({ factors, popular, categories, tags, onChange, onNewFactor }) {
   const [query, setQuery] = useState('')
   const [open, setOpen] = useState(false)
-  const [noteFor, setNoteFor] = useState(null) // index of tag being annotated
+  const [noteFor, setNoteFor] = useState(null)
   const [noteVal, setNoteVal] = useState('')
   const inputRef = useRef(null)
   const dropRef = useRef(null)
 
   const q = query.trim().toLowerCase()
-  const suggestions = q.length === 0 ? [] : factors.filter(f =>
-    f.name.toLowerCase().includes(q) && !tags.some(t => t.factor_id === f.id)
-  )
+
+  // When query is empty show popular (excluding already-picked), else filter all factors
+  const suggestions = q.length === 0
+    ? popular.filter(f => !tags.some(t => t.factor_id === f.id))
+    : factors.filter(f =>
+        f.name.toLowerCase().includes(q) && !tags.some(t => t.factor_id === f.id)
+      )
+
   const isNew = q.length > 0 && !factors.some(f => f.name.toLowerCase() === q)
 
   function addExisting(factor) {
@@ -88,7 +93,11 @@ function TagInput({ factors, categories, tags, onChange, onNewFactor }) {
             <div key={idx} className="tag-wrap">
               <div className={`tag tag--${tag.category.toLowerCase()}`}>
                 <span className="tag__name" onClick={() => noteFor === idx ? setNoteFor(null) : openNote(idx)}>
-                  {tag.name}{tag.note ? <em className="tag__note-preview"> · {tag.note}</em> : <span className="tag__add-note"> +note</span>}
+                  {tag.name}
+                  {tag.note
+                    ? <em className="tag__note-preview"> · {tag.note}</em>
+                    : <span className="tag__add-note"> +note</span>
+                  }
                 </span>
                 <button type="button" className="tag__remove" onClick={() => removeTag(idx)}>×</button>
               </div>
@@ -98,10 +107,13 @@ function TagInput({ factors, categories, tags, onChange, onNewFactor }) {
                     autoFocus
                     className="input input--sm"
                     type="text"
-                    placeholder={`Note for ${tag.name}… (e.g. 45 mins, Margherita)`}
+                    placeholder={`Note for ${tag.name}… (e.g. 45 mins, with milk)`}
                     value={noteVal}
                     onChange={e => setNoteVal(e.target.value)}
-                    onKeyDown={e => { if (e.key === 'Enter') saveNote(idx); if (e.key === 'Escape') setNoteFor(null) }}
+                    onKeyDown={e => {
+                      if (e.key === 'Enter') saveNote(idx)
+                      if (e.key === 'Escape') setNoteFor(null)
+                    }}
                   />
                   <button type="button" className="btn-inline" onClick={() => saveNote(idx)}>Save</button>
                 </div>
@@ -115,19 +127,24 @@ function TagInput({ factors, categories, tags, onChange, onNewFactor }) {
         ref={inputRef}
         className="input"
         type="text"
-        placeholder="Add a factor… (e.g. Pizza, Tired, Running)"
+        placeholder="Add a factor… (e.g. Coffee, Tired, Run)"
         value={query}
         onChange={e => { setQuery(e.target.value); setOpen(true) }}
-        onFocus={() => { if (query) setOpen(true) }}
+        onFocus={() => setOpen(true)}
         autoComplete="off"
       />
 
-      {open && (suggestions.length > 0 || isNew) && (
+      {open && suggestions.length > 0 && (
         <div className="dropdown" ref={dropRef}>
+          {q.length === 0 && (
+            <div className="dropdown__heading">Recently used</div>
+          )}
           {suggestions.map(f => (
             <button key={f.id} type="button" className="dropdown__item" onClick={() => addExisting(f)}>
               <span>{f.name}</span>
-              <span className={`dropdown__cat dropdown__cat--${f.category.name.toLowerCase()}`}>{f.category.name}</span>
+              <span className={`dropdown__cat dropdown__cat--${f.category.name.toLowerCase()}`}>
+                {f.category.name}
+              </span>
             </button>
           ))}
           {isNew && (
@@ -147,6 +164,12 @@ function TagInput({ factors, categories, tags, onChange, onNewFactor }) {
           )}
         </div>
       )}
+
+      {open && q.length > 0 && suggestions.length === 0 && !isNew && (
+        <div className="dropdown">
+          <div className="dropdown__heading">No matches</div>
+        </div>
+      )}
     </div>
   )
 }
@@ -156,6 +179,7 @@ function TagInput({ factors, categories, tags, onChange, onNewFactor }) {
 export default function LogPage() {
   const [categories, setCategories] = useState([])
   const [factors, setFactors] = useState([])
+  const [popular, setPopular] = useState([])
   const [entries, setEntries] = useState([])
   const [label, setLabel] = useState('')
   const [time, setTime] = useState(nowLocalInput())
@@ -166,8 +190,14 @@ export default function LogPage() {
   useEffect(() => {
     api.getCategories().then(setCategories).catch(() => {})
     api.getFactors().then(setFactors).catch(() => {})
+    api.getPopular().then(setPopular).catch(() => {})
     api.getEntries().then(setEntries).catch(() => {})
   }, [])
+
+  // Refresh popular after each new entry is saved
+  function refreshPopular() {
+    api.getPopular().then(setPopular).catch(() => {})
+  }
 
   async function handleNewFactor(name, categoryId) {
     const factor = await api.createFactor({ name, category_id: categoryId })
@@ -192,7 +222,10 @@ export default function LogPage() {
           note: t.note || null,
         })),
       })
-      if (entry) setEntries(prev => [entry, ...prev])
+      if (entry) {
+        setEntries(prev => [entry, ...prev])
+        refreshPopular()
+      }
       setLabel('')
       setTime(nowLocalInput())
       setTags([])
@@ -206,6 +239,7 @@ export default function LogPage() {
   async function handleDelete(id) {
     await api.deleteEntry(id)
     setEntries(prev => prev.filter(e => e.id !== id))
+    refreshPopular()
   }
 
   return (
@@ -228,6 +262,7 @@ export default function LogPage() {
 
         <TagInput
           factors={factors}
+          popular={popular}
           categories={categories}
           tags={tags}
           onChange={setTags}

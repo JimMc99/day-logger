@@ -17,6 +17,7 @@ async function request(method, path, body) {
 export const api = {
   getCategories: () => request('GET', '/categories'),
   getFactors:    () => request('GET', '/factors'),
+  getPopular:    () => request('GET', '/factors/popular'),
   createFactor:  (data) => request('POST', '/factors', data),
   deleteFactor:  (id) => request('DELETE', `/factors/${id}`),
   getEntries:    () => request('GET', '/entries'),
