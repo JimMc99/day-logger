@@ -28,6 +28,7 @@ function TagInput({ tags: allTags, popular, categories, selected, onChange, onNe
   const [open, setOpen] = useState(false)
   const [detailFor, setDetailFor] = useState(null)
   const [detailVal, setDetailVal] = useState('')
+  const [openCat, setOpenCat] = useState(null)
   const inputRef = useRef(null)
   const dropRef = useRef(null)
 
@@ -128,43 +129,100 @@ function TagInput({ tags: allTags, popular, categories, selected, onChange, onNe
         type="text"
         placeholder="Add a tag… (e.g. Coffee, Tired, Run)"
         value={query}
-        onChange={e => { setQuery(e.target.value); setOpen(true) }}
+        onChange={e => { setQuery(e.target.value); setOpen(true); setOpenCat(null) }}
         onFocus={() => setOpen(true)}
         autoComplete="off"
       />
 
-      {open && suggestions.length > 0 && (
+      {open && (
         <div className="dropdown" ref={dropRef}>
-          {q.length === 0 && <div className="dropdown__heading">Recently used</div>}
-          {suggestions.map(t => (
-            <button key={t.id} type="button" className="dropdown__item" onClick={() => addExisting(t)}>
-              <span>{t.name}</span>
-              <span className={`dropdown__cat dropdown__cat--${t.category.name.toLowerCase()}`}>
-                {t.category.name}
-              </span>
-            </button>
-          ))}
-          {isNew && (
-            <div className="dropdown__new">
-              <span className="dropdown__new-label">Add "{capitaliseFirst(query)}" as:</span>
-              <div className="dropdown__cats">
+          {/* Typing: show matches + new tag option */}
+          {q.length > 0 && (
+            <>
+              {suggestions.map(t => (
+                <button
+                  key={t.id}
+                  type="button"
+                  className="dropdown__item"
+                  onMouseDown={e => { e.preventDefault(); addExisting(t) }}
+                >
+                  <span>{t.name}</span>
+                  <span className={`dropdown__cat dropdown__cat--${t.category.name.toLowerCase()}`}>
+                    {t.category.name}
+                  </span>
+                </button>
+              ))}
+              {isNew && (
+                <div className="dropdown__new">
+                  <span className="dropdown__new-label">Add "{capitaliseFirst(query)}" as:</span>
+                  <div className="dropdown__cats">
+                    {categories.map(cat => (
+                      <button
+                        key={cat.id}
+                        type="button"
+                        className={`dropdown__cat-btn dropdown__cat-btn--${cat.name.toLowerCase()}`}
+                        onMouseDown={e => { e.preventDefault(); addNew(cat) }}
+                      >{cat.name}</button>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {suggestions.length === 0 && !isNew && (
+                <div className="dropdown__heading">No matches</div>
+              )}
+            </>
+          )}
+
+          {/* Empty input: show browse by category */}
+          {q.length === 0 && (
+            <div className="dropdown__browser">
+              <div className="dropdown__browser-cats">
                 {categories.map(cat => (
                   <button
                     key={cat.id}
                     type="button"
-                    className={`dropdown__cat-btn dropdown__cat-btn--${cat.name.toLowerCase()}`}
-                    onClick={() => addNew(cat)}
-                  >{cat.name}</button>
+                    className={`dropdown__browser-btn dropdown__browser-btn--${cat.name.toLowerCase()}${openCat === cat.id ? ' dropdown__browser-btn--open' : ''}`}
+                    onMouseDown={e => { e.preventDefault(); setOpenCat(openCat === cat.id ? null : cat.id) }}
+                  >
+                    {cat.name} {openCat === cat.id ? '▴' : '▾'}
+                  </button>
                 ))}
               </div>
+              {openCat && (
+                <div className="dropdown__browser-tags">
+                  {allTags
+                    .filter(t => t.category.id === openCat && !selected.some(s => s.tag_id === t.id))
+                    .map(t => (
+                      <button
+                        key={t.id}
+                        type="button"
+                        className={`chip chip--${t.category.name.toLowerCase()}`}
+                        onMouseDown={e => { e.preventDefault(); addExisting(t); setOpenCat(null); setOpen(false) }}
+                      >{t.name}</button>
+                    ))
+                  }
+                </div>
+              )}
+              {!openCat && popular.filter(t => !selected.some(s => s.tag_id === t.id)).length > 0 && (
+                <>
+                  <div className="dropdown__heading">Recently used</div>
+                  {popular.filter(t => !selected.some(s => s.tag_id === t.id)).map(t => (
+                    <button
+                      key={t.id}
+                      type="button"
+                      className="dropdown__item"
+                      onMouseDown={e => { e.preventDefault(); addExisting(t) }}
+                    >
+                      <span>{t.name}</span>
+                      <span className={`dropdown__cat dropdown__cat--${t.category.name.toLowerCase()}`}>
+                        {t.category.name}
+                      </span>
+                    </button>
+                  ))}
+                </>
+              )}
             </div>
           )}
-        </div>
-      )}
-
-      {open && q.length > 0 && suggestions.length === 0 && !isNew && (
-        <div className="dropdown">
-          <div className="dropdown__heading">No matches</div>
         </div>
       )}
     </div>
