@@ -17,7 +17,7 @@ class Tag(Base):
     name = Column(String(100), nullable=False, index=True)
     category_id = Column(Integer, ForeignKey('tag_category.id'), nullable=False)
     category = relationship('TagCategory', back_populates='tags')
-    entry_tags = relationship('EntryTag', back_populates='tag')
+    entry_and_tags = relationship('EntryAndTag', back_populates='tag')
 
 
 class Entry(Base):
@@ -25,15 +25,15 @@ class Entry(Base):
     id = Column(Integer, primary_key=True)
     timestamp = Column(DateTime, default=lambda: datetime.now(timezone.utc), index=True)
     title = Column(Text, nullable=True)
-    tags = relationship('EntryTag', back_populates='entry', cascade='all, delete-orphan')
+    tags = relationship('EntryAndTag', back_populates='entry', cascade='all, delete-orphan')
 
 
-class EntryTag(Base):
-    __tablename__ = 'entry_tag'
-    __table_args__ = (UniqueConstraint('entry_id', 'tag_id', name='uq_entry_tag'),)
+class EntryAndTag(Base):
+    __tablename__ = 'entry_and_tag'
+    __table_args__ = (UniqueConstraint('entry_id', 'tag_id', name='uq_entry_and_tag'),)
     id = Column(Integer, primary_key=True)
     entry_id = Column(Integer, ForeignKey('entry.id'), nullable=False)
     tag_id = Column(Integer, ForeignKey('tag.id'), nullable=False)
     detail = Column(Text, nullable=True)
     entry = relationship('Entry', back_populates='tags')
-    tag = relationship('Tag', back_populates='entry_tags')
+    tag = relationship('Tag', back_populates='entry_and_tags')

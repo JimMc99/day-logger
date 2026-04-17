@@ -24,7 +24,7 @@ CREATE TABLE entry (
 
 CREATE INDEX ix_entry_timestamp ON entry (timestamp);
 
-CREATE TABLE entry_tag (
+CREATE TABLE entry_and_tag (
     id       SERIAL PRIMARY KEY,
     entry_id INTEGER NOT NULL,
     tag_id   INTEGER NOT NULL,
@@ -37,7 +37,7 @@ CREATE TABLE entry_tag (
         FOREIGN KEY (tag_id)
         REFERENCES tag (id)
         ON DELETE CASCADE,
-    CONSTRAINT uq_entry_tag UNIQUE (entry_id, tag_id)
+    CONSTRAINT uq_entry_and_tag UNIQUE (entry_id, tag_id)
 );
 
 -- Categories
@@ -92,4 +92,3 @@ INSERT INTO tag (name, category_id) VALUES
     ('Good sleep', (SELECT id FROM tag_category WHERE name = 'Activity')),
     ('Poor sleep', (SELECT id FROM tag_category WHERE name = 'Activity')),
     ('Sedentary',  (SELECT id FROM tag_category WHERE name = 'Activity'));
-    

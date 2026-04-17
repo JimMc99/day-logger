@@ -25,12 +25,12 @@ class TagOut(BaseModel):
         from_attributes = True
 
 
-class EntryTagCreate(BaseModel):
+class EntryAndTagCreate(BaseModel):
     tag_id: int
     detail: Optional[str] = None
 
 
-class EntryTagOut(BaseModel):
+class EntryAndTagOut(BaseModel):
     id: int
     tag: TagOut
     detail: Optional[str]
@@ -42,7 +42,7 @@ class EntryTagOut(BaseModel):
 class EntryCreate(BaseModel):
     title: Optional[str] = None
     timestamp: Optional[datetime] = None
-    tags: Optional[List[EntryTagCreate]] = []
+    tags: Optional[List[EntryAndTagCreate]] = []
 
 
 class EntryUpdate(BaseModel):
@@ -54,7 +54,7 @@ class EntryOut(BaseModel):
     id: int
     title: Optional[str]
     timestamp: datetime
-    tags: List[EntryTagOut] = []
+    tags: List[EntryAndTagOut] = []
 
     class Config:
         from_attributes = True

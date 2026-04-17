@@ -4,12 +4,12 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import func
 from .db import get_db
-from .models import Entry, Tag, TagCategory, EntryTag
+from .models import Entry, Tag, TagCategory, EntryAndTag
 from .schema import (
     EntryCreate, EntryUpdate, EntryOut,
     TagCreate, TagOut,
     TagCategoryOut,
-    EntryTagCreate, EntryTagOut,
+    EntryAndTagCreate, EntryAndTagOut,
 )
 
 app = FastAPI(docs_url="/docs", redoc_url=None)
@@ -27,7 +27,7 @@ def load_entry(entry_id: int, db: Session) -> Entry:
         db.query(Entry)
         .options(
             joinedload(Entry.tags)
-            .joinedload(EntryTag.tag)
+            .joinedload(EntryAndTag.tag)
             .joinedload(Tag.category)
         )
         .filter(Entry.id == entry_id)
@@ -100,9 +100,9 @@ def delete_tag(tag_id: int, db: Session = Depends(get_db)):
 @app.get("/tags/popular", response_model=List[TagOut])
 def get_popular_tags(limit: int = 8, db: Session = Depends(get_db)):
     top_ids = (
-        db.query(EntryTag.tag_id)
-        .group_by(EntryTag.tag_id)
-        .order_by(func.count(EntryTag.id).desc())
+        db.query(EntryAndTag.tag_id)
+        .group_by(EntryAndTag.tag_id)
+        .order_by(func.count(EntryAndTag.id).desc())
         .limit(limit)
         .all()
     )
@@ -127,7 +127,7 @@ def get_entries(db: Session = Depends(get_db)):
         db.query(Entry)
         .options(
             joinedload(Entry.tags)
-            .joinedload(EntryTag.tag)
+            .joinedload(EntryAndTag.tag)
             .joinedload(Tag.category)
         )
         .order_by(Entry.timestamp.desc())
@@ -151,7 +151,7 @@ def create_entry(entry: EntryCreate, db: Session = Depends(get_db)):
         if not tag:
             db.rollback()
             raise HTTPException(status_code=404, detail=f"Tag {et.tag_id} not found")
-        link = EntryTag(
+        link = EntryAndTag(
             entry_id=db_entry.id,
             tag_id=et.tag_id,
             detail=et.detail,
@@ -186,29 +186,29 @@ def delete_entry(entry_id: int, db: Session = Depends(get_db)):
 
 # ── Entry tags ─────────────────────────────────────────────────────────────────
 
-@app.post("/entries/{entry_id}/tags", response_model=EntryTagOut, status_code=201)
-def add_tag_to_entry(entry_id: int, data: EntryTagCreate, db: Session = Depends(get_db)):
+@app.post("/entries/{entry_id}/tags", response_model=EntryAndTagOut, status_code=201)
+def add_tag_to_entry(entry_id: int, data: EntryAndTagCreate, db: Session = Depends(get_db)):
     if not db.query(Entry).filter(Entry.id == entry_id).first():
         raise HTTPException(status_code=404, detail="Entry not found")
     if not db.query(Tag).filter(Tag.id == data.tag_id).first():
         raise HTTPException(status_code=404, detail="Tag not found")
-    link = EntryTag(entry_id=entry_id, tag_id=data.tag_id, detail=data.detail)
+    link = EntryAndTag(entry_id=entry_id, tag_id=data.tag_id, detail=data.detail)
     db.add(link)
     db.commit()
     db.refresh(link)
     return (
-        db.query(EntryTag)
-        .options(joinedload(EntryTag.tag).joinedload(Tag.category))
-        .filter(EntryTag.id == link.id)
+        db.query(EntryAndTag)
+        .options(joinedload(EntryAndTag.tag).joinedload(Tag.category))
+        .filter(EntryAndTag.id == link.id)
         .first()
     )
 
 
 @app.delete("/entries/{entry_id}/tags/{entry_tag_id}", status_code=204)
 def remove_tag_from_entry(entry_id: int, entry_tag_id: int, db: Session = Depends(get_db)):
-    link = db.query(EntryTag).filter(
-        EntryTag.id == entry_tag_id,
-        EntryTag.entry_id == entry_id,
+    link = db.query(EntryAndTag).filter(
+        EntryAndTag.id == entry_tag_id,
+        EntryAndTag.entry_id == entry_id,
     ).first()
     if not link:
         raise HTTPException(status_code=404, detail="Entry tag not found")
