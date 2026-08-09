@@ -16,20 +16,14 @@ POSTGRES_DB=somedb
 ```
 Of course, change the user, password and db to whatever you want.
 
-First time to generate the initial (empty) volume:
-```
-docker volume rm day-logger_postgres_data
-docker volume create day-logger_postgres_data
-```
-
 To run:
 `docker compose up --build`
 
 To stop:
-`docker compose down -v`
+`docker compose down`
 
 If you need to directly enter the database:
-`docker exec -it day-logger-db-1 psql -U someuser -d somedb`
+`docker compose exec db psql -U someuser -d somedb`
 (with someuser and somedb whatever you have in your .env)
 
 ## Every once in a while (with caution)...

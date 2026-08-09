@@ -67,7 +67,6 @@ volumes:
   caddy_data:
   caddy_config:
   postgres_data:
-    external: true
     name: day-logger_postgres_data
 
 networks:
