@@ -18,8 +18,8 @@ Of course, change the user, password and db to whatever you want.
 
 First time to generate the initial (empty) volume:
 ```
-docker volume rm day_logger_postgres_data
-docker volume create day_logger_postgres_data
+docker volume rm day-logger_postgres_data
+docker volume create day-logger_postgres_data
 ```
 
 To run:
@@ -29,7 +29,7 @@ To stop:
 `docker compose down -v`
 
 If you need to directly enter the database:
-`docker exec -it day_logger-db-1 psql -U someuser -d somedb`
+`docker exec -it day-logger-db-1 psql -U someuser -d somedb`
 (with someuser and somedb whatever you have in your .env)
 
 ## Every once in a while (with caution)...
