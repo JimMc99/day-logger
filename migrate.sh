@@ -30,7 +30,7 @@ for f in $(ls /migrations/*.sql | sort); do
         echo "Skipping $filename (already applied)"
     else
         echo "Applying $filename..."
-        psql "$DB_URL" -f "$f"
+        psql "$DB_URL" -1 -v ON_ERROR_STOP=1 -f "$f"
         psql "$DB_URL" -c "INSERT INTO schema_migrations (filename) VALUES ('$filename');"
         echo "Applied $filename."
     fi

@@ -1,18 +1,40 @@
+
 from typing import List
+from datetime import datetime, timezone
+import re
+
 from fastapi import FastAPI, Depends, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from sqlalchemy.orm import Session, joinedload
-from sqlalchemy import func
+from sqlalchemy.orm import Session, joinedload, selectinload
+
 from .db import get_db
-from .models import Entry, Tag, TagCategory, EntryAndTag
+from .models import (
+    Baby,
+    Entry,
+    EntryType,
+    EntryOption,
+    EntryOptionSelection
+)
 from .schema import (
-    EntryCreate, EntryUpdate, EntryOut,
-    TagCreate, TagOut,
-    TagCategoryOut,
-    EntryAndTagCreate, EntryAndTagOut,
+    BabyCreate,
+    BabyOut,
+    EntryTypeCreate,
+    EntryTypeUpdate,
+    EntryTypeOut,
+    EntryOptionCreate,
+    EntryOptionUpdate,
+    EntryOptionOut,
+    EntryCreate,
+    EntryUpdate,
+    EntryOut
 )
 
-app = FastAPI(docs_url="/docs", redoc_url=None)
+
+app = FastAPI(
+    docs_url=None,
+    redoc_url=None,
+    openapi_url=None
+)
 
 app.add_middleware(
     CORSMiddleware,
@@ -22,195 +44,557 @@ app.add_middleware(
 )
 
 
+# ── Helpers ────────────────────────────────────────────
+
+def utc_now():
+    return datetime.now(timezone.utc)
+
+
+def make_slug(name):
+    return re.sub(
+        r'-+',
+        '-',
+        re.sub(r'[^a-z0-9]+', '-', name.lower()).strip('-')
+    )
+
+
 def load_entry(entry_id: int, db: Session) -> Entry:
     entry = (
         db.query(Entry)
         .options(
-            joinedload(Entry.tags)
-            .joinedload(EntryAndTag.tag)
-            .joinedload(Tag.category)
+            joinedload(Entry.entry_type)
+            .selectinload(EntryType.options),
+            selectinload(Entry.selections)
+            .joinedload(EntryOptionSelection.option)
         )
         .filter(Entry.id == entry_id)
         .first()
     )
+
     if not entry:
-        raise HTTPException(status_code=404, detail="Entry not found")
+        raise HTTPException(
+            status_code=404,
+            detail="Entry not found"
+        )
+
     return entry
 
 
-# ── Categories ─────────────────────────────────────────────────────────────────
+def entry_output(entry: Entry) -> dict:
+    return {
+        "id": entry.id,
+        "baby_id": entry.baby_id,
+        "entry_type": entry.entry_type,
+        "started_at": entry.started_at,
+        "ended_at": entry.ended_at,
+        "notes": entry.notes,
+        "created_at": entry.created_at,
+        "updated_at": entry.updated_at,
+        "selections": [
+            {
+                "id": selection.id,
+                "option_id": selection.option_id,
+                "name": selection.option.name,
+                "selected_at": selection.selected_at,
+                "sort_order": selection.sort_order
+            }
+            for selection in entry.selections
+        ]
+    }
 
-@app.get("/categories", response_model=List[TagCategoryOut])
-def get_categories(db: Session = Depends(get_db)):
-    return db.query(TagCategory).order_by(TagCategory.name).all()
+
+def validate_selections(entry_type, selections):
+    for selection in selections:
+        option = next(
+            (
+                option for option in entry_type.options
+                if option.id == selection.option_id
+                and option.is_active
+            ),
+            None
+        )
+
+        if not option:
+            raise HTTPException(
+                status_code=400,
+                detail="Invalid option for this activity"
+            )
+
+        if entry_type.options_have_times:
+            if selection.selected_at is None:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"A time is required for {option.name}"
+                )
+        elif selection.selected_at is not None:
+            raise HTTPException(
+                status_code=400,
+                detail="This activity does not use individual option times"
+            )
+
+# ── Health ─────────────────────────────────────────────
+
+@app.get("/health")
+def health():
+    return {"status": "ok"}
 
 
-# ── Tags ───────────────────────────────────────────────────────────────────────
+# ── Babies ─────────────────────────────────────────────
 
-@app.get("/tags", response_model=List[TagOut])
-def get_tags(db: Session = Depends(get_db)):
+@app.get("/babies", response_model=List[BabyOut])
+def get_babies(db: Session = Depends(get_db)):
     return (
-        db.query(Tag)
-        .options(joinedload(Tag.category))
-        .order_by(Tag.name)
+        db.query(Baby)
+        .filter(Baby.is_active == True)
+        .order_by(Baby.name)
         .all()
     )
 
 
-@app.post("/tags", response_model=TagOut, status_code=201)
-def create_tag(tag: TagCreate, db: Session = Depends(get_db)):
-    if not db.query(TagCategory).filter(TagCategory.id == tag.category_id).first():
-        raise HTTPException(status_code=404, detail="Category not found")
-    existing = (
-        db.query(Tag)
-        .filter(
-            func.lower(Tag.name) == tag.name.lower(),
-            Tag.category_id == tag.category_id,
+@app.post("/babies", response_model=BabyOut, status_code=201)
+def create_baby(
+    data: BabyCreate,
+    db: Session = Depends(get_db)
+):
+    name = data.name.strip()
+
+    if not name:
+        raise HTTPException(
+            status_code=400,
+            detail="Name is required"
         )
+
+    baby = Baby(
+        name=name,
+        date_of_birth=data.date_of_birth
+    )
+
+    db.add(baby)
+    db.commit()
+    db.refresh(baby)
+
+    return baby
+
+
+# ── Activities ─────────────────────────────────────────
+
+@app.get("/entry-types", response_model=List[EntryTypeOut])
+def get_entry_types(db: Session = Depends(get_db)):
+    return (
+        db.query(EntryType)
+        .options(selectinload(EntryType.options))
+        .filter(EntryType.is_active == True)
+        .order_by(EntryType.sort_order, EntryType.name)
+        .all()
+    )
+
+
+@app.post(
+    "/entry-types",
+    response_model=EntryTypeOut,
+    status_code=201
+)
+def create_entry_type(
+    data: EntryTypeCreate,
+    db: Session = Depends(get_db)
+):
+    name = data.name.strip()
+
+    if not name:
+        raise HTTPException(
+            status_code=400,
+            detail="Activity name is required"
+        )
+
+    slug = make_slug(name)
+
+    if not slug:
+        raise HTTPException(
+            status_code=400,
+            detail="Activity name must contain letters or numbers"
+        )
+
+    if db.query(EntryType).filter(
+        EntryType.slug == slug
+    ).first():
+        raise HTTPException(
+            status_code=409,
+            detail="An activity with this name already exists"
+        )
+
+    entry_type = EntryType(
+        name=name,
+        slug=slug,
+        description=data.description,
+        icon=data.icon,
+        options_have_times=data.options_have_times,
+        sort_order=data.sort_order
+    )
+
+    db.add(entry_type)
+    db.flush()
+
+    for option in data.options:
+        option_name = option.name.strip()
+
+        if not option_name:
+            raise HTTPException(
+                status_code=400,
+                detail="Option names cannot be empty"
+            )
+
+        entry_type.options.append(
+            EntryOption(
+                name=option_name,
+                sort_order=option.sort_order
+            )
+        )
+
+    db.commit()
+
+    return (
+        db.query(EntryType)
+        .options(selectinload(EntryType.options))
+        .filter(EntryType.id == entry_type.id)
         .first()
     )
+
+
+# ── Activity updates ───────────────────────────────────
+
+@app.patch(
+    "/entry-types/{type_id}",
+    response_model=EntryTypeOut
+)
+def update_entry_type(
+    type_id: int,
+    data: EntryTypeUpdate,
+    db: Session = Depends(get_db)
+):
+    entry_type = (
+        db.query(EntryType)
+        .options(selectinload(EntryType.options))
+        .filter(EntryType.id == type_id)
+        .first()
+    )
+
+    if not entry_type:
+        raise HTTPException(
+            status_code=404,
+            detail="Activity not found"
+        )
+
+    changes = data.model_dump(exclude_unset=True)
+
+    if "name" in changes:
+        name = changes["name"].strip()
+
+        if not name:
+            raise HTTPException(
+                status_code=400,
+                detail="Activity name is required"
+            )
+
+        entry_type.name = name
+
+    for field in (
+        "description",
+        "icon",
+        "options_have_times",
+        "sort_order",
+        "is_active"
+    ):
+        if field in changes:
+            setattr(entry_type, field, changes[field])
+
+    db.commit()
+    db.refresh(entry_type)
+
+    return entry_type
+
+
+# ── Activity options ───────────────────────────────────
+
+@app.post(
+    "/entry-types/{type_id}/options",
+    response_model=EntryOptionOut,
+    status_code=201
+)
+def create_option(
+    type_id: int,
+    data: EntryOptionCreate,
+    db: Session = Depends(get_db)
+):
+    entry_type = db.query(EntryType).filter(
+        EntryType.id == type_id,
+        EntryType.is_active == True
+    ).first()
+
+    if not entry_type:
+        raise HTTPException(
+            status_code=404,
+            detail="Activity not found"
+        )
+
+    name = data.name.strip()
+
+    if not name:
+        raise HTTPException(
+            status_code=400,
+            detail="Option name is required"
+        )
+
+    existing = db.query(EntryOption).filter(
+        EntryOption.entry_type_id == type_id,
+        EntryOption.name.ilike(name)
+    ).first()
+
     if existing:
-        return (
-            db.query(Tag)
-            .options(joinedload(Tag.category))
-            .filter(Tag.id == existing.id)
-            .first()
+        raise HTTPException(
+            status_code=409,
+            detail="This option already exists"
         )
-    db_tag = Tag(name=tag.name, category_id=tag.category_id)
-    db.add(db_tag)
+
+    option = EntryOption(
+        entry_type_id=type_id,
+        name=name,
+        sort_order=data.sort_order
+    )
+
+    db.add(option)
     db.commit()
-    db.refresh(db_tag)
-    return (
-        db.query(Tag)
-        .options(joinedload(Tag.category))
-        .filter(Tag.id == db_tag.id)
-        .first()
-    )
+    db.refresh(option)
+
+    return option
 
 
-@app.delete("/tags/{tag_id}", status_code=204)
-def delete_tag(tag_id: int, db: Session = Depends(get_db)):
-    tag = db.query(Tag).filter(Tag.id == tag_id).first()
-    if not tag:
-        raise HTTPException(status_code=404, detail="Tag not found")
-    db.delete(tag)
+@app.patch(
+    "/entry-types/{type_id}/options/{option_id}",
+    response_model=EntryOptionOut
+)
+def update_option(
+    type_id: int,
+    option_id: int,
+    data: EntryOptionUpdate,
+    db: Session = Depends(get_db)
+):
+    option = db.query(EntryOption).filter(
+        EntryOption.id == option_id,
+        EntryOption.entry_type_id == type_id
+    ).first()
+
+    if not option:
+        raise HTTPException(
+            status_code=404,
+            detail="Option not found"
+        )
+
+    changes = data.model_dump(exclude_unset=True)
+
+    if "name" in changes:
+        name = changes["name"].strip()
+
+        if not name:
+            raise HTTPException(
+                status_code=400,
+                detail="Option name is required"
+            )
+
+        duplicate = db.query(EntryOption).filter(
+            EntryOption.entry_type_id == type_id,
+            EntryOption.name.ilike(name),
+            EntryOption.id != option_id
+        ).first()
+
+        if duplicate:
+            raise HTTPException(
+                status_code=409,
+                detail="This option already exists"
+            )
+
+        option.name = name
+
+    for field in ("sort_order", "is_active"):
+        if field in changes:
+            setattr(option, field, changes[field])
+
     db.commit()
+    db.refresh(option)
+
+    return option
 
 
-@app.get("/tags/popular", response_model=List[TagOut])
-def get_popular_tags(limit: int = 8, db: Session = Depends(get_db)):
-    top_ids = (
-        db.query(EntryAndTag.tag_id)
-        .group_by(EntryAndTag.tag_id)
-        .order_by(func.count(EntryAndTag.id).desc())
-        .limit(limit)
-        .all()
-    )
-    id_list = [row[0] for row in top_ids]
-    if not id_list:
-        return []
-    tags = (
-        db.query(Tag)
-        .options(joinedload(Tag.category))
-        .filter(Tag.id.in_(id_list))
-        .all()
-    )
-    order = {tid: i for i, tid in enumerate(id_list)}
-    return sorted(tags, key=lambda t: order[t.id])
-
-
-# ── Entries ────────────────────────────────────────────────────────────────────
+# ── Entries ────────────────────────────────────────────
 
 @app.get("/entries", response_model=List[EntryOut])
-def get_entries(db: Session = Depends(get_db)):
-    return (
+def get_entries(
+    baby_id: int = 1,
+    limit: int = 200,
+    db: Session = Depends(get_db)
+):
+    entries = (
         db.query(Entry)
         .options(
-            joinedload(Entry.tags)
-            .joinedload(EntryAndTag.tag)
-            .joinedload(Tag.category)
+            joinedload(Entry.entry_type)
+            .selectinload(EntryType.options),
+            selectinload(Entry.selections)
+            .joinedload(EntryOptionSelection.option)
         )
-        .order_by(Entry.timestamp.desc())
+        .filter(Entry.baby_id == baby_id)
+        .order_by(Entry.started_at.desc())
+        .limit(min(max(limit, 1), 500))
         .all()
     )
+
+    return [
+        entry_output(entry)
+        for entry in entries
+    ]
 
 
 @app.get("/entries/{entry_id}", response_model=EntryOut)
-def get_entry(entry_id: int, db: Session = Depends(get_db)):
-    return load_entry(entry_id, db)
+def get_entry(
+    entry_id: int,
+    db: Session = Depends(get_db)
+):
+    return entry_output(load_entry(entry_id, db))
 
 
-@app.post("/entries", response_model=EntryOut, status_code=201)
-def create_entry(entry: EntryCreate, db: Session = Depends(get_db)):
-    db_entry = Entry(title=entry.title, timestamp=entry.timestamp)
-    db.add(db_entry)
-    db.flush()
+@app.post(
+    "/entries",
+    response_model=EntryOut,
+    status_code=201
+)
+def create_entry(
+    data: EntryCreate,
+    db: Session = Depends(get_db)
+):
+    baby = db.query(Baby).filter(
+        Baby.id == data.baby_id,
+        Baby.is_active == True
+    ).first()
 
-    for et in (entry.tags or []):
-        tag = db.query(Tag).filter(Tag.id == et.tag_id).first()
-        if not tag:
-            db.rollback()
-            raise HTTPException(status_code=404, detail=f"Tag {et.tag_id} not found")
-        link = EntryAndTag(
-            entry_id=db_entry.id,
-            tag_id=et.tag_id,
-            detail=et.detail,
+    if not baby:
+        raise HTTPException(
+            status_code=404,
+            detail="Baby not found"
         )
-        db.add(link)
 
-    db.commit()
-    return load_entry(db_entry.id, db)
-
-
-@app.patch("/entries/{entry_id}", response_model=EntryOut)
-def update_entry(entry_id: int, data: EntryUpdate, db: Session = Depends(get_db)):
-    entry = db.query(Entry).filter(Entry.id == entry_id).first()
-    if not entry:
-        raise HTTPException(status_code=404, detail="Entry not found")
-    if data.title is not None:
-        entry.title = data.title
-    if data.timestamp is not None:
-        entry.timestamp = data.timestamp
-    db.commit()
-    return load_entry(entry_id, db)
-
-
-@app.delete("/entries/{entry_id}", status_code=204)
-def delete_entry(entry_id: int, db: Session = Depends(get_db)):
-    entry = db.query(Entry).filter(Entry.id == entry_id).first()
-    if not entry:
-        raise HTTPException(status_code=404, detail="Entry not found")
-    db.delete(entry)
-    db.commit()
-
-
-# ── Entry tags ─────────────────────────────────────────────────────────────────
-
-@app.post("/entries/{entry_id}/tags", response_model=EntryAndTagOut, status_code=201)
-def add_tag_to_entry(entry_id: int, data: EntryAndTagCreate, db: Session = Depends(get_db)):
-    if not db.query(Entry).filter(Entry.id == entry_id).first():
-        raise HTTPException(status_code=404, detail="Entry not found")
-    if not db.query(Tag).filter(Tag.id == data.tag_id).first():
-        raise HTTPException(status_code=404, detail="Tag not found")
-    link = EntryAndTag(entry_id=entry_id, tag_id=data.tag_id, detail=data.detail)
-    db.add(link)
-    db.commit()
-    db.refresh(link)
-    return (
-        db.query(EntryAndTag)
-        .options(joinedload(EntryAndTag.tag).joinedload(Tag.category))
-        .filter(EntryAndTag.id == link.id)
+    entry_type = (
+        db.query(EntryType)
+        .options(selectinload(EntryType.options))
+        .filter(
+            EntryType.id == data.entry_type_id,
+            EntryType.is_active == True
+        )
         .first()
     )
 
+    if not entry_type:
+        raise HTTPException(
+            status_code=404,
+            detail="Activity not found"
+        )
 
-@app.delete("/entries/{entry_id}/tags/{entry_tag_id}", status_code=204)
-def remove_tag_from_entry(entry_id: int, entry_tag_id: int, db: Session = Depends(get_db)):
-    link = db.query(EntryAndTag).filter(
-        EntryAndTag.id == entry_tag_id,
-        EntryAndTag.entry_id == entry_id,
+    validate_selections(entry_type, data.selections)
+
+    entry = Entry(
+        baby_id=data.baby_id,
+        entry_type_id=data.entry_type_id,
+        started_at=data.started_at or utc_now(),
+        ended_at=data.ended_at,
+        notes=data.notes
+    )
+
+    db.add(entry)
+    db.flush()
+
+    for selection in data.selections:
+        db.add(
+            EntryOptionSelection(
+                entry_id=entry.id,
+                option_id=selection.option_id,
+                selected_at=selection.selected_at,
+                sort_order=selection.sort_order
+            )
+        )
+
+    db.commit()
+
+    return entry_output(load_entry(entry.id, db))
+
+
+@app.patch(
+    "/entries/{entry_id}",
+    response_model=EntryOut
+)
+def update_entry(
+    entry_id: int,
+    data: EntryUpdate,
+    db: Session = Depends(get_db)
+):
+    entry = load_entry(entry_id, db)
+
+    changes = data.model_dump(exclude_unset=True)
+
+    if "started_at" in changes:
+        if changes["started_at"] is None:
+            raise HTTPException(
+                status_code=400,
+                detail="Entry time cannot be empty"
+            )
+
+        entry.started_at = changes["started_at"]
+
+    if "ended_at" in changes:
+        entry.ended_at = changes["ended_at"]
+
+    if "notes" in changes:
+        entry.notes = changes["notes"]
+
+    if "selections" in changes and data.selections is not None:
+        validate_selections(
+            entry.entry_type,
+            data.selections
+        )
+
+        # Replace all existing selections.
+        entry.selections.clear()
+        db.flush()
+
+        for selection in data.selections:
+            entry.selections.append(
+                EntryOptionSelection(
+                    option_id=selection.option_id,
+                    selected_at=selection.selected_at,
+                    sort_order=selection.sort_order
+                )
+            )
+
+    entry.updated_at = utc_now()
+
+    db.commit()
+
+    return entry_output(load_entry(entry_id, db))
+
+
+@app.delete(
+    "/entries/{entry_id}",
+    status_code=204
+)
+def delete_entry(
+    entry_id: int,
+    db: Session = Depends(get_db)
+):
+    entry = db.query(Entry).filter(
+        Entry.id == entry_id
     ).first()
-    if not link:
-        raise HTTPException(status_code=404, detail="Entry tag not found")
-    db.delete(link)
+
+    if not entry:
+        raise HTTPException(
+            status_code=404,
+            detail="Entry not found"
+        )
+
+    db.delete(entry)
     db.commit()

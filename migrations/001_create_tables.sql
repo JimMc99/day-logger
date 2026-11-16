@@ -1,94 +1,92 @@
-CREATE TABLE tag_category (
-    id   SERIAL PRIMARY KEY,
-    name VARCHAR(50) NOT NULL UNIQUE
+
+CREATE TABLE baby (
+    id SERIAL PRIMARY KEY,
+    name VARCHAR(100) NOT NULL,
+    date_of_birth DATE,
+    is_active BOOLEAN NOT NULL DEFAULT TRUE,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE TABLE tag (
-    id          SERIAL PRIMARY KEY,
-    name        VARCHAR(100) NOT NULL,
-    category_id INTEGER NOT NULL,
-    CONSTRAINT fk_tag_category
-        FOREIGN KEY (category_id)
-        REFERENCES tag_category (id)
-        ON DELETE CASCADE,
-    CONSTRAINT uq_tag_name_category UNIQUE (name, category_id)
+CREATE TABLE entry_type (
+    id SERIAL PRIMARY KEY,
+    name VARCHAR(100) NOT NULL,
+    slug VARCHAR(100) NOT NULL UNIQUE,
+    description TEXT,
+    icon VARCHAR(50),
+    is_active BOOLEAN NOT NULL DEFAULT TRUE,
+    has_segments BOOLEAN NOT NULL DEFAULT FALSE,
+    options_have_times BOOLEAN NOT NULL DEFAULT FALSE,
+    sort_order INTEGER NOT NULL DEFAULT 0,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE INDEX ix_tag_name ON tag (name);
+CREATE TABLE entry_option (
+    id SERIAL PRIMARY KEY,
+    entry_type_id INTEGER NOT NULL
+        REFERENCES entry_type(id) ON DELETE CASCADE,
+    name VARCHAR(100) NOT NULL,
+    sort_order INTEGER NOT NULL DEFAULT 0,
+    is_active BOOLEAN NOT NULL DEFAULT TRUE,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT uq_entry_option_name UNIQUE (entry_type_id, name)
+);
 
 CREATE TABLE entry (
-    id        SERIAL PRIMARY KEY,
-    timestamp TIMESTAMP WITHOUT TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    title     TEXT
+    id SERIAL PRIMARY KEY,
+    baby_id INTEGER NOT NULL
+        REFERENCES baby(id) ON DELETE CASCADE,
+    entry_type_id INTEGER NOT NULL
+        REFERENCES entry_type(id),
+    started_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    ended_at TIMESTAMPTZ,
+    notes TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE INDEX ix_entry_timestamp ON entry (timestamp);
+CREATE INDEX ix_entry_baby_started
+    ON entry (baby_id, started_at DESC);
 
-CREATE TABLE entry_and_tag (
-    id       SERIAL PRIMARY KEY,
-    entry_id INTEGER NOT NULL,
-    tag_id   INTEGER NOT NULL,
-    detail   TEXT,
-    CONSTRAINT fk_entry
-        FOREIGN KEY (entry_id)
-        REFERENCES entry (id)
-        ON DELETE CASCADE,
-    CONSTRAINT fk_tag
-        FOREIGN KEY (tag_id)
-        REFERENCES tag (id)
-        ON DELETE CASCADE,
-    CONSTRAINT uq_entry_and_tag UNIQUE (entry_id, tag_id)
+CREATE INDEX ix_entry_type
+    ON entry (entry_type_id);
+
+CREATE TABLE entry_option_selection (
+    id SERIAL PRIMARY KEY,
+    entry_id INTEGER NOT NULL
+        REFERENCES entry(id) ON DELETE CASCADE,
+    option_id INTEGER NOT NULL
+        REFERENCES entry_option(id),
+    selected_at TIMESTAMPTZ,
+    sort_order INTEGER NOT NULL DEFAULT 0,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
--- Categories
-INSERT INTO tag_category (name) VALUES ('Food'), ('Feeling'), ('Activity');
+CREATE INDEX ix_entry_option_selection_entry
+    ON entry_option_selection (entry_id);
 
--- Food
-INSERT INTO tag (name, category_id) VALUES
-    ('Coffee',     (SELECT id FROM tag_category WHERE name = 'Food')),
-    ('Tea',        (SELECT id FROM tag_category WHERE name = 'Food')),
-    ('Alcohol',    (SELECT id FROM tag_category WHERE name = 'Food')),
-    ('Chocolate',  (SELECT id FROM tag_category WHERE name = 'Food')),
-    ('Pizza',      (SELECT id FROM tag_category WHERE name = 'Food')),
-    ('Pasta',      (SELECT id FROM tag_category WHERE name = 'Food')),
-    ('Rice',       (SELECT id FROM tag_category WHERE name = 'Food')),
-    ('Bread',      (SELECT id FROM tag_category WHERE name = 'Food')),
-    ('Cereal',     (SELECT id FROM tag_category WHERE name = 'Food')),
-    ('Eggs',       (SELECT id FROM tag_category WHERE name = 'Food')),
-    ('Salad',      (SELECT id FROM tag_category WHERE name = 'Food')),
-    ('Fruit',      (SELECT id FROM tag_category WHERE name = 'Food')),
-    ('Soup',       (SELECT id FROM tag_category WHERE name = 'Food')),
-    ('Cheese',     (SELECT id FROM tag_category WHERE name = 'Food')),
-    ('Milk',       (SELECT id FROM tag_category WHERE name = 'Food')),
-    ('Yoghurt',    (SELECT id FROM tag_category WHERE name = 'Food')),
-    ('Fish',       (SELECT id FROM tag_category WHERE name = 'Food')),
-    ('Chicken',    (SELECT id FROM tag_category WHERE name = 'Food')),
-    ('Red meat',   (SELECT id FROM tag_category WHERE name = 'Food'));
+-- Initial baby
+INSERT INTO baby (name) VALUES ('Baby');
 
--- Feeling
-INSERT INTO tag (name, category_id) VALUES
-    ('Energised',  (SELECT id FROM tag_category WHERE name = 'Feeling')),
-    ('Tired',      (SELECT id FROM tag_category WHERE name = 'Feeling')),
-    ('Focused',    (SELECT id FROM tag_category WHERE name = 'Feeling')),
-    ('Foggy',      (SELECT id FROM tag_category WHERE name = 'Feeling')),
-    ('Happy',      (SELECT id FROM tag_category WHERE name = 'Feeling')),
-    ('Low',        (SELECT id FROM tag_category WHERE name = 'Feeling')),
-    ('Calm',       (SELECT id FROM tag_category WHERE name = 'Feeling')),
-    ('Anxious',    (SELECT id FROM tag_category WHERE name = 'Feeling')),
-    ('Stressed',   (SELECT id FROM tag_category WHERE name = 'Feeling')),
-    ('Bloated',    (SELECT id FROM tag_category WHERE name = 'Feeling')),
-    ('Nauseous',   (SELECT id FROM tag_category WHERE name = 'Feeling')),
-    ('Headache',   (SELECT id FROM tag_category WHERE name = 'Feeling'));
+-- Built-in activities
+INSERT INTO entry_type
+    (name, slug, description, icon, options_have_times, sort_order)
+VALUES
+    ('Breastfeeding', 'breastfeeding', 'Breastfeeding sessions', 'milk', TRUE, 1),
+    ('Nappy change', 'nappy', 'Nappy changes', 'baby', FALSE, 2);
 
--- Activity
-INSERT INTO tag (name, category_id) VALUES
-    ('Run',        (SELECT id FROM tag_category WHERE name = 'Activity')),
-    ('Walk',       (SELECT id FROM tag_category WHERE name = 'Activity')),
-    ('Gym',        (SELECT id FROM tag_category WHERE name = 'Activity')),
-    ('Cycle',      (SELECT id FROM tag_category WHERE name = 'Activity')),
-    ('Swim',       (SELECT id FROM tag_category WHERE name = 'Activity')),
-    ('Yoga',       (SELECT id FROM tag_category WHERE name = 'Activity')),
-    ('Stretching', (SELECT id FROM tag_category WHERE name = 'Activity')),
-    ('Good sleep', (SELECT id FROM tag_category WHERE name = 'Activity')),
-    ('Poor sleep', (SELECT id FROM tag_category WHERE name = 'Activity')),
-    ('Sedentary',  (SELECT id FROM tag_category WHERE name = 'Activity'));
+-- Breastfeeding options
+INSERT INTO entry_option (entry_type_id, name, sort_order)
+SELECT id, 'Left', 1 FROM entry_type WHERE slug = 'breastfeeding';
+
+INSERT INTO entry_option (entry_type_id, name, sort_order)
+SELECT id, 'Right', 2 FROM entry_type WHERE slug = 'breastfeeding';
+
+INSERT INTO entry_option (entry_type_id, name, sort_order)
+SELECT id, 'Burp', 3 FROM entry_type WHERE slug = 'breastfeeding';
+
+-- Nappy options
+INSERT INTO entry_option (entry_type_id, name, sort_order)
+SELECT id, 'Poo', 1 FROM entry_type WHERE slug = 'nappy';
+
+INSERT INTO entry_option (entry_type_id, name, sort_order)
+SELECT id, 'Wee', 2 FROM entry_type WHERE slug = 'nappy';

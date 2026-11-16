@@ -1,60 +1,125 @@
-from datetime import datetime
-from typing import List, Optional
-from pydantic import BaseModel
+
+from datetime import datetime, date
+from typing import Optional, List
+
+from pydantic import BaseModel, ConfigDict, Field
 
 
-class TagCategoryOut(BaseModel):
+class ORMModel(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+
+# ── Babies ─────────────────────────────────────────────
+
+class BabyCreate(BaseModel):
+    name: str
+    date_of_birth: Optional[date] = None
+
+
+class BabyOut(ORMModel):
     id: int
     name: str
+    date_of_birth: Optional[date]
+    is_active: bool
 
-    class Config:
-        from_attributes = True
 
+# ── Activity options ───────────────────────────────────
 
-class TagCreate(BaseModel):
+class EntryOptionCreate(BaseModel):
     name: str
-    category_id: int
+    sort_order: int = 0
 
 
-class TagOut(BaseModel):
+class EntryOptionUpdate(BaseModel):
+    name: Optional[str] = None
+    sort_order: Optional[int] = None
+    is_active: Optional[bool] = None
+
+
+class EntryOptionOut(ORMModel):
     id: int
     name: str
-    category: TagCategoryOut
-
-    class Config:
-        from_attributes = True
+    sort_order: int
+    is_active: bool
 
 
-class EntryAndTagCreate(BaseModel):
-    tag_id: int
-    detail: Optional[str] = None
+# ── Activities ────────────────────────────────────────
+
+class EntryTypeCreate(BaseModel):
+    name: str
+    description: Optional[str] = None
+    icon: Optional[str] = None
+    options_have_times: bool = False
+    sort_order: int = 100
+    options: List[EntryOptionCreate] = Field(default_factory=list)
 
 
-class EntryAndTagOut(BaseModel):
+class EntryTypeUpdate(BaseModel):
+    name: Optional[str] = None
+    description: Optional[str] = None
+    icon: Optional[str] = None
+    options_have_times: Optional[bool] = None
+    sort_order: Optional[int] = None
+    is_active: Optional[bool] = None
+
+
+class EntryTypeOut(ORMModel):
     id: int
-    tag: TagOut
-    detail: Optional[str]
+    name: str
+    slug: str
+    description: Optional[str]
+    icon: Optional[str]
+    is_active: bool
+    options_have_times: bool
+    sort_order: int
+    options: List[EntryOptionOut] = Field(default_factory=list)
 
-    class Config:
-        from_attributes = True
 
+# ── Selected options ──────────────────────────────────
+
+class EntryOptionSelectionCreate(BaseModel):
+    option_id: int
+    selected_at: Optional[datetime] = None
+    sort_order: int = 0
+
+
+class EntryOptionSelectionOut(BaseModel):
+    id: int
+    option_id: int
+    name: str
+    selected_at: Optional[datetime]
+    sort_order: int
+
+
+# ── Entries ───────────────────────────────────────────
 
 class EntryCreate(BaseModel):
-    title: Optional[str] = None
-    timestamp: Optional[datetime] = None
-    tags: Optional[List[EntryAndTagCreate]] = []
+    baby_id: int = 1
+    entry_type_id: int
+    started_at: Optional[datetime] = None
+    ended_at: Optional[datetime] = None
+    notes: Optional[str] = None
+    selections: List[EntryOptionSelectionCreate] = Field(
+        default_factory=list
+    )
 
 
 class EntryUpdate(BaseModel):
-    title: Optional[str] = None
-    timestamp: Optional[datetime] = None
+    started_at: Optional[datetime] = None
+    ended_at: Optional[datetime] = None
+    notes: Optional[str] = None
+    selections: Optional[List[EntryOptionSelectionCreate]] = None
 
 
 class EntryOut(BaseModel):
     id: int
-    title: Optional[str]
-    timestamp: datetime
-    tags: List[EntryAndTagOut] = []
-
-    class Config:
-        from_attributes = True
+    baby_id: int
+    entry_type: EntryTypeOut
+    started_at: datetime
+    ended_at: Optional[datetime] = None
+    notes: Optional[str]
+    created_at: datetime
+    updated_at: datetime
+    selections: List[EntryOptionSelectionOut] = Field(
+        default_factory=list
+    )

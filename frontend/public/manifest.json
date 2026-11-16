@@ -1,7 +1,7 @@
 {
-  "name": "Day Logger",
-  "short_name": "DayLog",
-  "description": "Log your day — food, feelings, activities",
+  "name": "Baby Logger",
+  "short_name": "BabyLog",
+  "description": "Log your baby",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#1a1a2e",

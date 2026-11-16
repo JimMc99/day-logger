@@ -1,4 +1,4 @@
-# Day Logger
+# Baby Logger
 
 ## Prerequisites
 

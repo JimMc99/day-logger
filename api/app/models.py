@@ -1,39 +1,194 @@
-from sqlalchemy import Column, Integer, String, DateTime, Text, ForeignKey, UniqueConstraint
+
+from sqlalchemy import (
+    Column, Integer, String, Text, Boolean,
+    Date, DateTime, ForeignKey, UniqueConstraint,
+    CheckConstraint, JSON
+)
 from sqlalchemy.orm import relationship
 from datetime import datetime, timezone
+
 from .db import Base
 
 
-class TagCategory(Base):
-    __tablename__ = 'tag_category'
-    id = Column(Integer, primary_key=True)
-    name = Column(String(50), unique=True, nullable=False)
-    tags = relationship('Tag', back_populates='category')
+def utc_now():
+    return datetime.now(timezone.utc)
 
 
-class Tag(Base):
-    __tablename__ = 'tag'
+class Baby(Base):
+    __tablename__ = 'baby'
+
     id = Column(Integer, primary_key=True)
-    name = Column(String(100), nullable=False, index=True)
-    category_id = Column(Integer, ForeignKey('tag_category.id'), nullable=False)
-    category = relationship('TagCategory', back_populates='tags')
-    entry_and_tags = relationship('EntryAndTag', back_populates='tag')
+    name = Column(String(100), nullable=False)
+    date_of_birth = Column(Date, nullable=True)
+    is_active = Column(Boolean, default=True, nullable=False)
+    created_at = Column(DateTime(timezone=True), default=utc_now, nullable=False)
+
+    entries = relationship(
+        'Entry',
+        back_populates='baby',
+        cascade='all, delete-orphan'
+    )
+
+
+class EntryType(Base):
+    __tablename__ = 'entry_type'
+
+    id = Column(Integer, primary_key=True)
+    name = Column(String(100), nullable=False)
+    slug = Column(String(100), unique=True, nullable=False)
+    description = Column(Text, nullable=True)
+    icon = Column(String(50), nullable=True)
+    is_active = Column(Boolean, default=True, nullable=False)
+    has_segments = Column(Boolean, default=False, nullable=False)
+    options_have_times = Column(Boolean, default=False, nullable=False)
+    sort_order = Column(Integer, default=0, nullable=False)
+    created_at = Column(DateTime(timezone=True), default=utc_now, nullable=False)
+
+    fields = relationship(
+        'EntryField',
+        back_populates='entry_type',
+        cascade='all, delete-orphan'
+    )
+
+    options = relationship(
+        'EntryOption',
+        back_populates='entry_type',
+        cascade='all, delete-orphan',
+        order_by='EntryOption.sort_order'
+    )
+
+    entries = relationship('Entry', back_populates='entry_type')
+
+
+class EntryField(Base):
+    __tablename__ = 'entry_field'
+
+    id = Column(Integer, primary_key=True)
+
+    entry_type_id = Column(
+        Integer,
+        ForeignKey('entry_type.id', ondelete='CASCADE'),
+        nullable=False
+    )
+
+    name = Column(String(100), nullable=False)
+    label = Column(String(100), nullable=False)
+    field_type = Column(String(50), nullable=False)
+    is_required = Column(Boolean, default=False, nullable=False)
+    sort_order = Column(Integer, default=0, nullable=False)
+
+    entry_type = relationship(
+        'EntryType',
+        back_populates='fields'
+    )
+
+class EntryOption(Base):
+    __tablename__ = 'entry_option'
+    __table_args__ = (
+        UniqueConstraint(
+            'entry_type_id',
+            'name',
+            name='uq_entry_option_name'
+        ),
+    )
+
+    id = Column(Integer, primary_key=True)
+    entry_type_id = Column(
+        Integer,
+        ForeignKey('entry_type.id', ondelete='CASCADE'),
+        nullable=False
+    )
+    name = Column(String(100), nullable=False)
+    sort_order = Column(Integer, default=0, nullable=False)
+    is_active = Column(Boolean, default=True, nullable=False)
+    created_at = Column(DateTime(timezone=True), default=utc_now, nullable=False)
+
+    entry_type = relationship('EntryType', back_populates='options')
+
+    selections = relationship(
+        'EntryOptionSelection',
+        back_populates='option'
+    )
 
 
 class Entry(Base):
     __tablename__ = 'entry'
+
     id = Column(Integer, primary_key=True)
-    timestamp = Column(DateTime, default=lambda: datetime.now(timezone.utc), index=True)
-    title = Column(Text, nullable=True)
-    tags = relationship('EntryAndTag', back_populates='entry', cascade='all, delete-orphan')
+
+    baby_id = Column(
+        Integer,
+        ForeignKey('baby.id', ondelete='CASCADE'),
+        nullable=False
+    )
+
+    entry_type_id = Column(
+        Integer,
+        ForeignKey('entry_type.id'),
+        nullable=False
+    )
+
+    started_at = Column(
+        DateTime(timezone=True),
+        default=utc_now,
+        nullable=False
+    )
+
+    ended_at = Column(DateTime(timezone=True), nullable=True)
+
+    notes = Column(Text, nullable=True)
+
+    created_at = Column(
+        DateTime(timezone=True),
+        default=utc_now,
+        nullable=False
+    )
+
+    updated_at = Column(
+        DateTime(timezone=True),
+        default=utc_now,
+        onupdate=utc_now,
+        nullable=False
+    )
+
+    baby = relationship('Baby', back_populates='entries')
+    entry_type = relationship('EntryType', back_populates='entries')
+
+    selections = relationship(
+        'EntryOptionSelection',
+        back_populates='entry',
+        cascade='all, delete-orphan',
+        order_by='EntryOptionSelection.sort_order'
+    )
 
 
-class EntryAndTag(Base):
-    __tablename__ = 'entry_and_tag'
-    __table_args__ = (UniqueConstraint('entry_id', 'tag_id', name='uq_entry_and_tag'),)
+class EntryOptionSelection(Base):
+    __tablename__ = 'entry_option_selection'
+
     id = Column(Integer, primary_key=True)
-    entry_id = Column(Integer, ForeignKey('entry.id'), nullable=False)
-    tag_id = Column(Integer, ForeignKey('tag.id'), nullable=False)
-    detail = Column(Text, nullable=True)
-    entry = relationship('Entry', back_populates='tags')
-    tag = relationship('Tag', back_populates='entry_and_tags')
+
+    entry_id = Column(
+        Integer,
+        ForeignKey('entry.id', ondelete='CASCADE'),
+        nullable=False
+    )
+
+    option_id = Column(
+        Integer,
+        ForeignKey('entry_option.id'),
+        nullable=False
+    )
+
+    selected_at = Column(DateTime(timezone=True), nullable=True)
+
+    sort_order = Column(Integer, default=0, nullable=False)
+
+    created_at = Column(
+        DateTime(timezone=True),
+        default=utc_now,
+        nullable=False
+    )
+
+    entry = relationship('Entry', back_populates='selections')
+
+    option = relationship('EntryOption', back_populates='selections')
