@@ -16,6 +16,7 @@ CREATE TABLE entry_type (
     is_active BOOLEAN NOT NULL DEFAULT TRUE,
     has_segments BOOLEAN NOT NULL DEFAULT FALSE,
     options_have_times BOOLEAN NOT NULL DEFAULT FALSE,
+    has_duration BOOLEAN NOT NULL DEFAULT FALSE,
     sort_order INTEGER NOT NULL DEFAULT 0,
     created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
@@ -56,7 +57,8 @@ CREATE TABLE entry_option_selection (
         REFERENCES entry(id) ON DELETE CASCADE,
     option_id INTEGER NOT NULL
         REFERENCES entry_option(id),
-    selected_at TIMESTAMPTZ,
+    started_at TIMESTAMPTZ,
+    ended_at TIMESTAMPTZ,
     sort_order INTEGER NOT NULL DEFAULT 0,
     created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
@@ -69,10 +71,10 @@ INSERT INTO baby (name) VALUES ('Baby');
 
 -- Built-in activities
 INSERT INTO entry_type
-    (name, slug, description, icon, options_have_times, sort_order)
+    (name, slug, description, icon, options_have_times, has_duration, sort_order)
 VALUES
-    ('Breastfeeding', 'breastfeeding', 'Breastfeeding sessions', 'milk', TRUE, 1),
-    ('Nappy change', 'nappy', 'Nappy changes', 'baby', FALSE, 2);
+    ('Breastfeeding', 'breastfeeding', 'Breastfeeding sessions', 'milk', TRUE, FALSE, 1),
+    ('Nappy change', 'nappy', 'Nappy changes', 'baby', FALSE, FALSE, 2);
 
 -- Breastfeeding options
 INSERT INTO entry_option (entry_type_id, name, sort_order)

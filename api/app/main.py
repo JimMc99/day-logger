@@ -95,12 +95,14 @@ def entry_output(entry: Entry) -> dict:
                 "id": selection.id,
                 "option_id": selection.option_id,
                 "name": selection.option.name,
-                "selected_at": selection.selected_at,
+                "started_at": selection.started_at,
+                "ended_at": selection.ended_at,
                 "sort_order": selection.sort_order
             }
             for selection in entry.selections
         ]
     }
+
 
 
 def validate_selections(entry_type, selections):
@@ -120,17 +122,26 @@ def validate_selections(entry_type, selections):
                 detail="Invalid option for this activity"
             )
 
-        if entry_type.options_have_times:
-            if selection.selected_at is None:
+        # Activities without individually timed actions,
+        # such as nappy changes, cannot have action times.
+        if not entry_type.options_have_times:
+            if selection.started_at is not None or selection.ended_at is not None:
                 raise HTTPException(
                     status_code=400,
-                    detail=f"A time is required for {option.name}"
+                    detail="This activity does not use individual action times"
                 )
-        elif selection.selected_at is not None:
+
+        # Timed activities allow either, both or neither time.
+        if (
+            selection.started_at
+            and selection.ended_at
+            and selection.ended_at < selection.started_at
+        ):
             raise HTTPException(
                 status_code=400,
-                detail="This activity does not use individual option times"
+                detail=f"End time cannot precede start time for {option.name}"
             )
+
 
 # ── Health ─────────────────────────────────────────────
 
@@ -228,6 +239,7 @@ def create_entry_type(
         description=data.description,
         icon=data.icon,
         options_have_times=data.options_have_times,
+        has_duration=data.has_duration,
         sort_order=data.sort_order
     )
 
@@ -301,6 +313,7 @@ def update_entry_type(
         "description",
         "icon",
         "options_have_times",
+        "has_duration",
         "sort_order",
         "is_active"
     ):
@@ -509,15 +522,18 @@ def create_entry(
     db.add(entry)
     db.flush()
 
+
     for selection in data.selections:
         db.add(
             EntryOptionSelection(
                 entry_id=entry.id,
                 option_id=selection.option_id,
-                selected_at=selection.selected_at,
+                started_at=selection.started_at,
+                ended_at=selection.ended_at,
                 sort_order=selection.sort_order
             )
         )
+
 
     db.commit()
 
@@ -566,10 +582,12 @@ def update_entry(
             entry.selections.append(
                 EntryOptionSelection(
                     option_id=selection.option_id,
-                    selected_at=selection.selected_at,
+                    started_at=selection.started_at,
+                    ended_at=selection.ended_at,
                     sort_order=selection.sort_order
                 )
             )
+
 
     entry.updated_at = utc_now()
 

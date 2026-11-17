@@ -50,6 +50,7 @@ class EntryTypeCreate(BaseModel):
     description: Optional[str] = None
     icon: Optional[str] = None
     options_have_times: bool = False
+    has_duration: bool = False
     sort_order: int = 100
     options: List[EntryOptionCreate] = Field(default_factory=list)
 
@@ -59,6 +60,7 @@ class EntryTypeUpdate(BaseModel):
     description: Optional[str] = None
     icon: Optional[str] = None
     options_have_times: Optional[bool] = None
+    has_duration: Optional[bool] = None
     sort_order: Optional[int] = None
     is_active: Optional[bool] = None
 
@@ -71,6 +73,7 @@ class EntryTypeOut(ORMModel):
     icon: Optional[str]
     is_active: bool
     options_have_times: bool
+    has_duration: bool
     sort_order: int
     options: List[EntryOptionOut] = Field(default_factory=list)
 
@@ -79,7 +82,8 @@ class EntryTypeOut(ORMModel):
 
 class EntryOptionSelectionCreate(BaseModel):
     option_id: int
-    selected_at: Optional[datetime] = None
+    started_at: Optional[datetime] = None
+    ended_at: Optional[datetime] = None
     sort_order: int = 0
 
 
@@ -87,7 +91,8 @@ class EntryOptionSelectionOut(BaseModel):
     id: int
     option_id: int
     name: str
-    selected_at: Optional[datetime]
+    started_at: Optional[datetime] = None
+    ended_at: Optional[datetime] = None
     sort_order: int
 
 

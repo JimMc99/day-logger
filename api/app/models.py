@@ -41,6 +41,7 @@ class EntryType(Base):
     is_active = Column(Boolean, default=True, nullable=False)
     has_segments = Column(Boolean, default=False, nullable=False)
     options_have_times = Column(Boolean, default=False, nullable=False)
+    has_duration = Column(Boolean, default=False, nullable=False)
     sort_order = Column(Integer, default=0, nullable=False)
     created_at = Column(DateTime(timezone=True), default=utc_now, nullable=False)
 
@@ -179,7 +180,8 @@ class EntryOptionSelection(Base):
         nullable=False
     )
 
-    selected_at = Column(DateTime(timezone=True), nullable=True)
+    started_at = Column(DateTime(timezone=True), nullable=True)
+    ended_at = Column(DateTime(timezone=True), nullable=True)
 
     sort_order = Column(Integer, default=0, nullable=False)
 
